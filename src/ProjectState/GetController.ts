@@ -2,7 +2,7 @@ import { ProjectDataStructure, PinsAndCurvesProjectController } from "@mtrifonov
 import * as ext from "@mtrifonov-design/pinsandcurves-external";
 
 function getController(dispatch : any) {
-    sendMessage("CORE::CORE::CORE", "getController");
+    //sendMessage("CORE::CORE::CORE", "getController");
     const pb = new ProjectDataStructure.ProjectBuilder();
     pb.addContinuousSignal('signal1', 'signal1.x', [1, 5]);
     pb.addPin('signal1', 20, 1, 'return easyLinear()');
@@ -25,6 +25,7 @@ function getController(dispatch : any) {
     pb.addStaticNumberSignal('signal6', 'folder1.signal1.x', [1, 5], 3);
     pb.addStaticNumberSignal('signal7', 'folder1.signal1.x', [1, 5], 3);
     pb.addStaticNumberSignal('signal8', 'folder1.signal1.x', [1, 5], 3);
+    pb.addStaticStringSignal('HIDDEN_CODE', "__hidden_code", "function setup() {\n    createCanvas(400, 400);\n    background(220);\n  }")
     // sendMessage("CORE::CORE::CORE", "getController2");
     // sendMessage("CORE::CORE::CORE", ext.ProjectDataStructure);
     // sendMessage("CORE::CORE::CORE", ProjectDataStructure);

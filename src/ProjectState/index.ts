@@ -10,34 +10,49 @@ class State {
         this.controller = getController(dispatch);
     }
     channel : string = "ProjectState";
-    subscribers : string[] = []
-    subscribe(address : string) {
-        if (!this.subscribers.includes(address)) {
-            this.subscribers.push(address)
-        }
+    subscribers : { [instance_id: string]: any } = {};
+    subscribe(receiver : { instance_id: string, modality: string, resource_id: string }) {
+        // if (!this.subscribers.includes(address)) {
+        //     this.subscribers.push(address)
+        // }
+        this.subscribers[receiver.instance_id] = receiver;
+
+
         // send current state to address
-        this.sendTo(address, "subscribeConfirmation", true);
+        this.addToWorkload(receiver, "subscribeConfirmation", true);
     }
-    unsubscribe(address : string) {
-        this.subscribers = this.subscribers.filter(subscriber => subscriber !== address)
-    }
-    sendTo(address : string, request: string, payload: any) {
-        sendMessage(address, {
-            channel: this.channel,
-            request: request,
-            payload,
-        })
+    workload : { [thread: string]: any[]} = {};
+    addToWorkload(receiver : {
+        instance_id: string,
+        modality: string,
+        resource_id: string
+    }, request: string, messagePayload: any) {
+        if (!this.workload["default"]) {
+            this.workload["default"] = [];
+        }
+        this.workload["default"].push(
+            {
+                type: "worker",
+                receiver,
+                payload: {
+                    channel: "ProjectState",
+                    request: "projectNodeEvent",
+                    payload: messagePayload,
+                }
+            }
+        )
     }
     emit(payload: any) {
-        this.subscribers.forEach(address => {
-            this.sendTo(address, "projectNodeEvent", payload);
+        Object.values(this.subscribers).forEach(receiver => {
+            this.addToWorkload(receiver, "projectNodeEvent", payload);
         })
     }
     distribute(source: string, request: string, payload: any) {
-        const otherSubscribers = this.subscribers.filter(subscriber => subscriber !== source);
-        otherSubscribers.forEach(address => {
-            this.sendTo(address, request, payload);
-        })
+        // const otherSubscribers = this.subscribers.filter(subscriber => subscriber !== source);
+        // otherSubscribers.forEach(address => {
+        //     this.sendTo(address, request, payload);
+        // })
+        this.emit(payload);
         this.controller.receive(payload);
     }
 
@@ -45,21 +60,23 @@ class State {
 
 const state = new State()
 
-function onMessage(string: string) {
+function onCompute(string: string) {
     string = decodeURI(string);
-    const { source, content } = JSON.parse(string);
-    const { channel, request, payload } = content;
+    const unit = JSON.parse(string);
+    log(unit)
+    const { channel, request, payload } = unit.payload;
 
     // sendMessage("CORE::CORE::CORE", controller);
 
     if (channel === "ProjectState") {
-
         if (request === "subscribe") {
-            state.subscribe(source);
+            state.subscribe(unit.sender);
             // @ts-ignore
+            return {};
+
         } 
         if (request === "projectNodeEvent") {
-            state.distribute(source, "projectNodeEvent", payload);
+            state.distribute(unit.sender, "projectNodeEvent", payload);
         }
 
         // @ts-ignore
@@ -73,11 +90,12 @@ function onMessage(string: string) {
 
 }
 
-onMessage(
+
+
+onCompute(
     decodeURI(
         JSON.stringify({
-            source: "SELF::SELF::SELF",
-            content: {
+            payload: {
                 channel: "SELF",
                 request: "getProject",
                 payload: {}
