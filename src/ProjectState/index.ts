@@ -36,7 +36,7 @@ class State {
                 receiver,
                 payload: {
                     channel: "ProjectState",
-                    request: "projectNodeEvent",
+                    request: request,
                     payload: messagePayload,
                 }
             }
@@ -54,6 +54,10 @@ class State {
         // })
         this.emit(payload);
         this.controller.receive(payload);
+    }
+
+    clearWorkload() {
+        this.workload = {};
     }
 
 }
@@ -77,6 +81,9 @@ function onCompute(string: string) {
         } 
         if (request === "projectNodeEvent") {
             state.distribute(unit.sender, "projectNodeEvent", payload);
+            const workload = state.workload;
+            state.clearWorkload();
+            return workload;
         }
 
         // @ts-ignore
