@@ -16,6 +16,7 @@ class State {
     }
 
     send(payload: any) {
+        //(this.subscribers[this.receiver_id],this.receiver_id, payload);
         if (this.receiver_id === "") return;
         if (payload.type === "hostIsConnected") return;
         this.addToWorkload(this.subscribers[this.receiver_id], "projectNodeEvent", payload, this.receiver_id);
@@ -102,7 +103,9 @@ function onCompute(string: string) {
     state.receiver_id = subscriber_id;
     if (channel === "ProjectState") {
         if (request === "subscribe") {
+            //log(unit);
             state.subscribe(unit.sender, subscriber_id);
+            //log(state.subscribers);
             const workload = state.workload;
             state.clearWorkload();
             return workload;

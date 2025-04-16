@@ -7,7 +7,9 @@
   "description": "",
   "exports": {
     ".": {
-      "projectState": "./dist/ProjectState/index.js"
+      "projectState": "./dist/ProjectState/index.js",
+      "copilotEval": "./dist/CopilotEval/index.js",
+      "copilotData": "./dist/CopilotData/index.js"
     }
   },
   "scripts": {
