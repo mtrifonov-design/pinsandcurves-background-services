@@ -93,9 +93,11 @@ function onCompute(string: string) {
     }
 
     if (LOAD_SESSION) {
-        const { worm, subscribers} = s;
-        //state.subscribers = subscribers;
-        state.changeController(worm);
+        if (s) {
+            const { worm, subscribers} = s;
+            //state.subscribers = subscribers;
+            state.changeController(worm);
+        }
         return {};
     }
 

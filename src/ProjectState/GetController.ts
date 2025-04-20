@@ -10,8 +10,8 @@ function getController(dispatch : any, worm?: any) {
     pb.addPin('s1', 60, 0, 'return easyLinear()');
     pb.setSignalActiveStatus('s1', true);
     pb.addStaticStringSignal('HIDDEN_CODE', "__hidden_code", `
-async function setup() {
-  createCanvas(1920, 1080);
+function setup() {
+  setupCanvas(1920, 1080);
 }
 function draw() {
     clear();

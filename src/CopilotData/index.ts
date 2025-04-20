@@ -5,6 +5,7 @@ type ProjectNodeEventDispatcher = PinsAndCurvesProjectController.ProjectNodeEven
 let persistentData = {
     messages: [],
 };
+let subscribers = [];
 function onCompute(string: string) {
     string = decodeURI(string);
     const unit = JSON.parse(string);
@@ -26,26 +27,41 @@ function onCompute(string: string) {
     }
 
     if (LOAD_SESSION) {
-        persistentData = state;
-        return {};
+        if (state) {
+            persistentData = state;
+        }
+        return {
+            default: subscribers.map((subscriber) => ({
+                type: "worker",
+                receiver: subscriber,
+                payload: {
+                    channel: "PERSISTENT_DATA",
+                    request: "responseData",
+                    payload: persistentData,
+                }
+            }))
+        };
     }
 
     if (channel === "PERSISTENT_DATA") {
         if (request === "requestData") {
-            return {
-                default: [{
-                    type: "worker",
-                    receiver: unit.sender,
-                    payload: {
-                        channel: "PERSISTENT_DATA",
-                        request: "responseData",
-                        payload: persistentData,
-                    }
-                }]
-            }
+            subscribers.push(unit.sender);
+                return {
+                    default: [{
+                        type: "worker",
+                        receiver: unit.sender,
+                        payload: {
+                            channel: "PERSISTENT_DATA",
+                            request: "responseData",
+                            payload: persistentData,
+                        }
+                    }]
+                }
+
 
         } 
         if (request === "sendData") {
+            console.log("Received data: ", payload);
             persistentData = payload;
             return {};
         }
