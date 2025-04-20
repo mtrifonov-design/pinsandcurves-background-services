@@ -103,6 +103,8 @@ function onCompute(string: string) {
             return false;
         }
         const projectTools = client.projectTools;
+        const randomId = () => randomUUID().slice(0, 5);
+        randomId();
         if (projectTools === undefined) {
             return false;
         }

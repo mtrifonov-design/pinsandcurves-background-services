@@ -9,7 +9,8 @@
     ".": {
       "projectState": "./dist/ProjectState/index.js",
       "copilotEval": "./dist/CopilotEval/index.js",
-      "copilotData": "./dist/CopilotData/index.js"
+      "copilotData": "./dist/CopilotData/index.js",
+      "assetServer": "./dist/AssetServer/index.js"
     }
   },
   "scripts": {
