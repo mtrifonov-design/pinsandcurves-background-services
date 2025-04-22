@@ -29,6 +29,12 @@ class State {
         this.subscribers[subscriber_id] = receiver;
         this.addToWorkload(receiver, "subscribeConfirmation", true, subscriber_id);
     }
+    unsubscribe(subscriber_id: string) {
+        const receiver = this.subscribers[subscriber_id];
+        delete this.subscribers[subscriber_id];
+        this.addToWorkload(receiver, "unsubscribeConfirmation", true, subscriber_id);
+    }
+
     workload : { [thread: string]: any[]} = {};
     addToWorkload(receiver : {
         instance_id: string,
@@ -108,6 +114,14 @@ function onCompute(string: string) {
             //log(unit);
             state.subscribe(unit.sender, subscriber_id);
             //log(state.subscribers);
+            const workload = state.workload;
+            state.clearWorkload();
+            return workload;
+
+        } 
+        if (request === "unsubscribe") {
+            //log(unit);
+            state.unsubscribe(subscriber_id);
             const workload = state.workload;
             state.clearWorkload();
             return workload;
