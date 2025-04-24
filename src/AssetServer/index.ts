@@ -10,12 +10,16 @@ type Asset = {
 
 class State {
 
-    assetDB: Asset[] = [];
+    assetDB: Asset[] = [
+
+    ];
 
     constructor() {
     }
 
     receiveAssets(sender_id: any,payload: Asset[]) {
+        // delete the assets that are about to be replaced
+        this.assetDB = this.assetDB.filter(asset => !payload.map(p => p.asset_id).includes(asset.asset_id));
         this.assetDB.push(...payload);
         const preview = this.assetDB.map(asset => {
             return {
@@ -28,7 +32,6 @@ class State {
         });
         console.log("Assets: ", preview);
         this.emit(sender_id,payload)
-
     }
 
 
@@ -70,7 +73,13 @@ class State {
         this.addToWorkload(receiver, "subscribeConfirmation", this.assetDB);
     }
 
+    unsubscribe(receiver: { instance_id: string, modality: string, resource_id: string }) {
+        delete this.subscribers[receiver.instance_id];
+        this.addToWorkload(receiver, "unsubscribeConfirmation", true);
+    }
+
     emit(sender_id: string,payload: any) {
+        console.log(this.subscribers)
         Object.keys(this.subscribers).forEach(subscriber_id => {
             if (subscriber_id === sender_id) return;
             this.addToWorkload(this.subscribers[subscriber_id], "assetEvent", payload);
@@ -83,8 +92,8 @@ const state = new State()
 function onCompute(string: string) {
     string = decodeURI(string);
     const unit = JSON.parse(string);
-    const { request, payload, SAVE_SESSION, LOAD_SESSION, SUBSCRIBE, key, state:s  } = unit.payload;
-    console.log(unit);
+    const { request, payload, SAVE_SESSION, LOAD_SESSION, key, state:s  } = unit.payload;
+    // console.log(unit);
 
     if (SAVE_SESSION) {
         return {
@@ -111,6 +120,13 @@ function onCompute(string: string) {
 
     if (request === "subscribe") {
         state.subscribe(unit.sender);
+        const workload = state.workload;
+        state.clearWorkload();
+        return workload;
+    }
+
+    if (request === "unsubscribe") {
+        state.unsubscribe(unit.sender);
         const workload = state.workload;
         state.clearWorkload();
         return workload;
