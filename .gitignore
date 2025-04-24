@@ -1,1 +1,3 @@
 node_modules
+dist/cors_http_server.py
+dist/__pycache__
