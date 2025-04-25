@@ -7,10 +7,9 @@ function getController(dispatch, worm) {
     pb.setTimelineData(900, 30, 0);
     pb.addContinuousSignal('s1', 'Signal 1', [0, 1]);
     pb.addPin('s1', 20, 0, 'return easyLinear()');
-    pb.addPin('s1', 50, 1, 'return easyLinear()');
-    pb.addPin('s1', 60, 0, 'return easyLinear()');
+    pb.addPin('s1', 40, 1, 'return easyEaseOut()');
+    pb.addPin('s1', 60, 0, 'return easyEaseIn()');
     pb.setSignalActiveStatus('s1', true);
-    pb.addStaticStringSignal('HIDDEN_CODE', "__hidden_code", "\nfunction setup() {\n  setupCanvas(1920, 1080);\n}\nfunction draw() {\n    clear();\n    background(220);\n    circle(200, 200, signal(\"Signal 1\") * 100);\n}\n");
     var controller;
     if (worm) {
         controller = wt.PinsAndCurvesProjectController
