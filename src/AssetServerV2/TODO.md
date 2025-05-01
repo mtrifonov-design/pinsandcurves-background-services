@@ -1,0 +1,1 @@
+- Make it so that asset ids are issued, not self chosen. This will be more robust.

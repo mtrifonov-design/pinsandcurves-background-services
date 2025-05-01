@@ -51,6 +51,27 @@ export default [
     ],
   },
   {
+    input: "src/AssetServerV2/index.ts",
+    output: [
+      {
+        file: packageJson.exports["."].assetServerV,
+        format: "cjs",
+        sourcemap: true,
+      },
+    ],
+    plugins: [
+      peerDepsExternal(),
+      resolve(),
+      commonjs(),
+      replace({
+        "process.env.NODE_ENV": JSON.stringify("production"), // Replace with "production" or "development"
+        preventAssignment: true, // Required to suppress warnings
+      }),
+      typescript({ tsconfig: "./tsconfig.json" }),
+      //terser(),
+    ],
+  },
+  {
     input: "src/CopilotEval/index.ts",
     output: [
       {
