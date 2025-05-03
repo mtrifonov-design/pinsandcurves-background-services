@@ -110,18 +110,20 @@ class Asset {
                 throw new Error("Asset is dirty but has no maintainer");
             }
             // send outstanding updates to asset maintainer
-            const requestId = randomUUID();
+            const request_id = randomUUID();
             this.addToWorkload(
                 createUnit(this.maintainer, {
-                    request: "update",
-                    updates: this.outstanding_updates,
-                    requestId,
+                    processUpdates: { 
+                        updates: this.outstanding_updates,
+                        request_id, 
+                        asset_id: this.id,
+                    }
                 })
             );
             this.outstanding_updates = [];
             // queue this get request
 
-            this.pending_read_requests[requestId] = subscription_id;
+            this.pending_read_requests[request_id] = subscription_id;
         } else {
             // answer the request
             const subscriber = this.subscribers[subscription_id];
@@ -149,11 +151,13 @@ class Asset {
 
     receiveUpdateFromMaintainer(payload: any) {
         this.dirty = false;
-        const { requestId, asset_data } = payload;
+        const { request_id, asset_data } = payload;
+        // update the asset data
+        this.data = asset_data;
         // answer the request
-        const subscriber_id = this.pending_read_requests[requestId];
+        const subscriber_id = this.pending_read_requests[request_id];
         this.readAsset(subscriber_id);
-        delete this.pending_read_requests[requestId];
+        delete this.pending_read_requests[request_id];
     }
 
     outstanding_updates: any[] = [];

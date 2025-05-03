@@ -109,15 +109,17 @@ var Asset = /** @class */ (function () {
                 throw new Error("Asset is dirty but has no maintainer");
             }
             // send outstanding updates to asset maintainer
-            var requestId = randomUUID();
+            var request_id = randomUUID();
             this.addToWorkload(createUnit(this.maintainer, {
-                request: "update",
-                updates: this.outstanding_updates,
-                requestId: requestId,
+                processUpdates: {
+                    updates: this.outstanding_updates,
+                    request_id: request_id,
+                    asset_id: this.id,
+                }
             }));
             this.outstanding_updates = [];
             // queue this get request
-            this.pending_read_requests[requestId] = subscription_id;
+            this.pending_read_requests[request_id] = subscription_id;
         }
         else {
             // answer the request
@@ -142,11 +144,13 @@ var Asset = /** @class */ (function () {
     };
     Asset.prototype.receiveUpdateFromMaintainer = function (payload) {
         this.dirty = false;
-        var requestId = payload.requestId; payload.asset_data;
+        var request_id = payload.request_id, asset_data = payload.asset_data;
+        // update the asset data
+        this.data = asset_data;
         // answer the request
-        var subscriber_id = this.pending_read_requests[requestId];
+        var subscriber_id = this.pending_read_requests[request_id];
         this.readAsset(subscriber_id);
-        delete this.pending_read_requests[requestId];
+        delete this.pending_read_requests[request_id];
     };
     Asset.prototype.receiveUpdate = function (update, subscription_id) {
         var _this = this;
@@ -313,6 +317,7 @@ var AssetServer = /** @class */ (function () {
     };
     AssetServer.prototype.updateAsset = function (assetId, update, subscription_id) {
         var asset = this.assets.find(function (asset) { return asset.id === assetId; });
+        console.log("updateAsset", assetId, update, subscription_id);
         if (asset) {
             asset.receiveUpdate(update, subscription_id);
         }
@@ -322,6 +327,12 @@ var AssetServer = /** @class */ (function () {
         if (asset) {
             asset.receiveUpdateMetadata(metadata, subscription_id);
             this.updateIndexAsset();
+        }
+    };
+    AssetServer.prototype.maintainerUpdateResponse = function (assetId, update) {
+        var asset = this.assets.find(function (asset) { return asset.id === assetId; });
+        if (asset) {
+            asset.receiveUpdateFromMaintainer(update);
         }
     };
     AssetServer.prototype.deleteAsset = function (assetId, subscription_id) {
@@ -349,7 +360,7 @@ var assetServer = new AssetServer(addToWorkload);
 function onCompute(string) {
     string = decodeURI(string);
     var unit = JSON.parse(string);
-    var _a = unit.payload, SAVE_SESSION = _a.SAVE_SESSION, LOAD_SESSION = _a.LOAD_SESSION, key = _a.key, state = _a.state, createAsset = _a.createAsset, subscribeToExistingAsset = _a.subscribeToExistingAsset, unsubscribeFromAsset = _a.unsubscribeFromAsset, updateAsset = _a.updateAsset, deleteAsset = _a.deleteAsset, updateAssetMetadata = _a.updateAssetMetadata;
+    var _a = unit.payload, SAVE_SESSION = _a.SAVE_SESSION, LOAD_SESSION = _a.LOAD_SESSION, key = _a.key, state = _a.state, createAsset = _a.createAsset, subscribeToExistingAsset = _a.subscribeToExistingAsset, unsubscribeFromAsset = _a.unsubscribeFromAsset, updateAsset = _a.updateAsset, deleteAsset = _a.deleteAsset, updateAssetMetadata = _a.updateAssetMetadata, maintainerUpdateResponse = _a.maintainerUpdateResponse;
     if (SAVE_SESSION) {
         return {
             persistence: [{
@@ -408,6 +419,13 @@ function onCompute(string) {
     if (deleteAsset) {
         var asset_id = deleteAsset.asset_id, subscription_id = deleteAsset.subscription_id;
         assetServer.deleteAsset(asset_id, subscription_id);
+        var currentWorkload = workload;
+        clearWorkload();
+        return currentWorkload;
+    }
+    if (maintainerUpdateResponse) {
+        var asset_id = maintainerUpdateResponse.asset_id;
+        assetServer.maintainerUpdateResponse(asset_id, maintainerUpdateResponse);
         var currentWorkload = workload;
         clearWorkload();
         return currentWorkload;

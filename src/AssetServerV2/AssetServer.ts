@@ -71,6 +71,7 @@ class AssetServer {
 
     updateAsset(assetId: string, update: any, subscription_id: string) {
         const asset = this.assets.find(asset => asset.id === assetId);
+        console.log("updateAsset", assetId, update, subscription_id);
         if (asset) {
             asset.receiveUpdate(update, subscription_id);
         }
@@ -81,6 +82,13 @@ class AssetServer {
         if (asset) {
             asset.receiveUpdateMetadata(metadata, subscription_id);
             this.updateIndexAsset();
+        }
+    }
+
+    maintainerUpdateResponse(assetId: string, update: any) {
+        const asset = this.assets.find(asset => asset.id === assetId);
+        if (asset) {
+            asset.receiveUpdateFromMaintainer(update);
         }
     }
 

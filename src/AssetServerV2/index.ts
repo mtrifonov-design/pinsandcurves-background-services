@@ -24,6 +24,7 @@ function onCompute(string: string) {
         updateAsset,
         deleteAsset,
         updateAssetMetadata,
+        maintainerUpdateResponse,
 
     } = unit.payload;
 
@@ -93,6 +94,14 @@ function onCompute(string: string) {
     if (deleteAsset) {
         const { asset_id, subscription_id } = deleteAsset;
         assetServer.deleteAsset(asset_id, subscription_id);
+        const currentWorkload = workload;
+        clearWorkload();
+        return currentWorkload;
+    }
+
+    if (maintainerUpdateResponse) {
+        const { asset_id  } = maintainerUpdateResponse;
+        assetServer.maintainerUpdateResponse(asset_id, maintainerUpdateResponse);
         const currentWorkload = workload;
         clearWorkload();
         return currentWorkload;

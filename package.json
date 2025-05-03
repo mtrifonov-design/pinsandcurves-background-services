@@ -8,6 +8,7 @@
   "exports": {
     ".": {
       "projectState": "./dist/ProjectState/index.js",
+      "timelineProcessor": "./dist/TimelineProcessor/index.js",
       "copilotEval": "./dist/CopilotEval/index.js",
       "copilotData": "./dist/CopilotData/index.js",
       "assetServer": "./dist/AssetServer/index.js",
