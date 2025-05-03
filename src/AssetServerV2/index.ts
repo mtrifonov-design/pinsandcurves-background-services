@@ -20,8 +20,10 @@ function onCompute(string: string) {
     const { SAVE_SESSION, LOAD_SESSION, key, state,
         createAsset,
         subscribeToExistingAsset,
+        unsubscribeFromAsset,
         updateAsset,
         deleteAsset,
+        updateAssetMetadata,
 
     } = unit.payload;
 
@@ -56,30 +58,47 @@ function onCompute(string: string) {
     }
 
     if (subscribeToExistingAsset) {
-        const { assetId, subscription_name } = subscribeToExistingAsset;
-        assetServer.subscribeToExistingAsset(unit.sender, assetId, subscription_name);
+        const { asset_id, subscription_name } = subscribeToExistingAsset;
+        assetServer.subscribeToExistingAsset(unit.sender, asset_id, subscription_name);
+        const currentWorkload = workload;
+        clearWorkload();
+        return currentWorkload;
+    }
+
+    if (unsubscribeFromAsset) {
+        const { asset_id, subscription_id } = unsubscribeFromAsset;
+        assetServer.unsubscribeFromAsset(asset_id, subscription_id);
         const currentWorkload = workload;
         clearWorkload();
         return currentWorkload;
     }
 
     if (updateAsset) {
-        const { assetId, update, subscription_id } = updateAsset;
-        assetServer.updateAsset(assetId, update, subscription_id);
+        const { asset_id, update, subscription_id } = updateAsset;
+        assetServer.updateAsset(asset_id, update, subscription_id);
+        const currentWorkload = workload;
+        clearWorkload();
+        return currentWorkload;
+    }
+
+    if (updateAssetMetadata) {
+        const { asset_id, metadata, subscription_id } = updateAssetMetadata;
+        console.log("updateAssetMetadata", asset_id, metadata, subscription_id);
+        assetServer.updateAssetMetadata(asset_id, metadata, subscription_id);
         const currentWorkload = workload;
         clearWorkload();
         return currentWorkload;
     }
 
     if (deleteAsset) {
-        const { assetId, subscription_id } = deleteAsset;
-        assetServer.deleteAsset(assetId, subscription_id);
+        const { asset_id, subscription_id } = deleteAsset;
+        assetServer.deleteAsset(asset_id, subscription_id);
         const currentWorkload = workload;
         clearWorkload();
         return currentWorkload;
     }
 
-    
+
 
 }
 

@@ -54,12 +54,12 @@ function createUnit(receiver, payload) {
     };
 }
 var Asset = /** @class */ (function () {
-    function Asset(sa, addToWorkload) {
+    function Asset(sa, addToWorkload, instance, subscription_name) {
         this._dirty = false;
         this.pending_read_requests = {};
         this.outstanding_updates = [];
         this.subscribers = {};
-        this.id = sa.id;
+        this.id = randomUUID();
         this.data = sa.data;
         this.metadata = sa.metadata;
         this.on_update = sa.on_update;
@@ -74,6 +74,12 @@ var Asset = /** @class */ (function () {
             this.addToWorkload(createUnit(this.maintainer, {
                 init: this.data,
             }));
+            if (instance && subscription_name) {
+                this.subscribe(instance, {
+                    receive_initial_state: false,
+                    subscription_name: subscription_name,
+                });
+            }
         }
     }
     Object.defineProperty(Asset.prototype, "dirty", {
@@ -117,9 +123,9 @@ var Asset = /** @class */ (function () {
             // answer the request
             var subscriber = this.subscribers[subscription_id];
             var getAssetResponse = {
+                subscription_id: subscription_id,
                 asset_id: this.id,
                 asset_data: this.data,
-                asset_metadata: this.metadata,
             };
             this.addToWorkload(createUnit(subscriber.instance, {
                 getAssetResponse: getAssetResponse,
@@ -158,11 +164,29 @@ var Asset = /** @class */ (function () {
         updateReceivers.forEach(function (subscriber_id) {
             var subscriber = _this.subscribers[subscriber_id];
             var receiveUpdate = {
-                asset_id: _this.id,
+                subscription_id: subscriber_id,
                 update: update,
             };
             _this.addToWorkload(createUnit(subscriber.instance, {
                 receiveUpdate: receiveUpdate,
+            }));
+        });
+    };
+    Asset.prototype.receiveUpdateMetadata = function (metadata, subscription_id) {
+        var _this = this;
+        this.metadata = metadata;
+        // distribute the update to all subscribers except the one that sent it
+        var updateReceivers = subscription_id ?
+            Object.keys(this.subscribers).filter(function (subscriber_id) { return subscriber_id !== subscription_id; })
+            : Object.keys(this.subscribers);
+        updateReceivers.forEach(function (subscriber_id) {
+            var subscriber = _this.subscribers[subscriber_id];
+            var receiveUpdateMetadata = {
+                subscription_id: subscriber_id,
+                metadata: metadata,
+            };
+            _this.addToWorkload(createUnit(subscriber.instance, {
+                receiveUpdateMetadata: receiveUpdateMetadata,
             }));
         });
     };
@@ -174,7 +198,7 @@ var Asset = /** @class */ (function () {
         otherSubscribers.forEach(function (subscriber_id) {
             var subscriber = _this.subscribers[subscriber_id];
             var deleteNotification = {
-                asset_id: _this.id,
+                subscription_id: subscription_id,
             };
             _this.addToWorkload(createUnit(subscriber.instance, {
                 deleteNotification: deleteNotification,
@@ -193,6 +217,7 @@ var Asset = /** @class */ (function () {
         };
         var subscriptionConfirmation = {
             subscription_id: subscription_id,
+            asset_id: this.id,
             subscription_name: options.subscription_name
         };
         // push a confirmation to the subscriber
@@ -205,6 +230,7 @@ var Asset = /** @class */ (function () {
         }
     };
     Asset.prototype.unsubscribe = function (subscriber_id) {
+        var instance = this.subscribers[subscriber_id].instance;
         if (this.subscribers[subscriber_id]) {
             delete this.subscribers[subscriber_id];
         }
@@ -212,7 +238,7 @@ var Asset = /** @class */ (function () {
         var unsubscribeConfirmation = {
             subscription_id: subscriber_id
         };
-        this.addToWorkload(createUnit(this.subscribers[subscriber_id].instance, {
+        this.addToWorkload(createUnit(instance, {
             unsubscribeConfirmation: unsubscribeConfirmation,
         }));
     };
@@ -222,14 +248,15 @@ var Asset = /** @class */ (function () {
 var IndexAsset = /** @class */ (function (_super) {
     __extends(IndexAsset, _super);
     function IndexAsset(addToWorkload) {
-        return _super.call(this, {
-            id: "index",
+        var _this = _super.call(this, {
             data: {},
             metadata: {},
             on_update: {
                 type: "simple",
             }
         }, addToWorkload) || this;
+        _this.id = "index";
+        return _this;
     }
     return IndexAsset;
 }(Asset));
@@ -261,12 +288,12 @@ var AssetServer = /** @class */ (function () {
         }
     };
     AssetServer.prototype.createAsset = function (instance, asset, subscription_name) {
-        var newAsset = new Asset(asset, this.addToWorkload.bind(this));
+        var newAsset = new Asset(asset, this.addToWorkload.bind(this), subscription_name ? instance : undefined, subscription_name);
         this.assets.push(newAsset);
-        newAsset.subscribe(instance, {
-            receive_initial_state: false,
-            subscription_name: subscription_name,
-        });
+        // newAsset.subscribe(instance,{
+        //     receive_initial_state: false,
+        //     subscription_name,
+        // })
         this.updateIndexAsset();
     };
     AssetServer.prototype.subscribeToExistingAsset = function (instance, assetId, subscription_name) {
@@ -278,10 +305,23 @@ var AssetServer = /** @class */ (function () {
             });
         }
     };
+    AssetServer.prototype.unsubscribeFromAsset = function (assetId, subscription_id) {
+        var asset = this.assets.find(function (asset) { return asset.id === assetId; });
+        if (asset) {
+            asset.unsubscribe(subscription_id);
+        }
+    };
     AssetServer.prototype.updateAsset = function (assetId, update, subscription_id) {
         var asset = this.assets.find(function (asset) { return asset.id === assetId; });
         if (asset) {
             asset.receiveUpdate(update, subscription_id);
+        }
+    };
+    AssetServer.prototype.updateAssetMetadata = function (assetId, metadata, subscription_id) {
+        var asset = this.assets.find(function (asset) { return asset.id === assetId; });
+        if (asset) {
+            asset.receiveUpdateMetadata(metadata, subscription_id);
+            this.updateIndexAsset();
         }
     };
     AssetServer.prototype.deleteAsset = function (assetId, subscription_id) {
@@ -289,6 +329,7 @@ var AssetServer = /** @class */ (function () {
         if (asset) {
             asset.receiveDelete(subscription_id);
             this.assets = this.assets.filter(function (a) { return a.id !== assetId; });
+            this.updateIndexAsset();
         }
     };
     return AssetServer;
@@ -308,7 +349,7 @@ var assetServer = new AssetServer(addToWorkload);
 function onCompute(string) {
     string = decodeURI(string);
     var unit = JSON.parse(string);
-    var _a = unit.payload, SAVE_SESSION = _a.SAVE_SESSION, LOAD_SESSION = _a.LOAD_SESSION, key = _a.key, state = _a.state, createAsset = _a.createAsset, subscribeToExistingAsset = _a.subscribeToExistingAsset, updateAsset = _a.updateAsset, deleteAsset = _a.deleteAsset;
+    var _a = unit.payload, SAVE_SESSION = _a.SAVE_SESSION, LOAD_SESSION = _a.LOAD_SESSION, key = _a.key, state = _a.state, createAsset = _a.createAsset, subscribeToExistingAsset = _a.subscribeToExistingAsset, unsubscribeFromAsset = _a.unsubscribeFromAsset, updateAsset = _a.updateAsset, deleteAsset = _a.deleteAsset, updateAssetMetadata = _a.updateAssetMetadata;
     if (SAVE_SESSION) {
         return {
             persistence: [{
@@ -336,22 +377,37 @@ function onCompute(string) {
         return currentWorkload;
     }
     if (subscribeToExistingAsset) {
-        var assetId = subscribeToExistingAsset.assetId, subscription_name = subscribeToExistingAsset.subscription_name;
-        assetServer.subscribeToExistingAsset(unit.sender, assetId, subscription_name);
+        var asset_id = subscribeToExistingAsset.asset_id, subscription_name = subscribeToExistingAsset.subscription_name;
+        assetServer.subscribeToExistingAsset(unit.sender, asset_id, subscription_name);
+        var currentWorkload = workload;
+        clearWorkload();
+        return currentWorkload;
+    }
+    if (unsubscribeFromAsset) {
+        var asset_id = unsubscribeFromAsset.asset_id, subscription_id = unsubscribeFromAsset.subscription_id;
+        assetServer.unsubscribeFromAsset(asset_id, subscription_id);
         var currentWorkload = workload;
         clearWorkload();
         return currentWorkload;
     }
     if (updateAsset) {
-        var assetId = updateAsset.assetId, update = updateAsset.update, subscription_id = updateAsset.subscription_id;
-        assetServer.updateAsset(assetId, update, subscription_id);
+        var asset_id = updateAsset.asset_id, update = updateAsset.update, subscription_id = updateAsset.subscription_id;
+        assetServer.updateAsset(asset_id, update, subscription_id);
+        var currentWorkload = workload;
+        clearWorkload();
+        return currentWorkload;
+    }
+    if (updateAssetMetadata) {
+        var asset_id = updateAssetMetadata.asset_id, metadata = updateAssetMetadata.metadata, subscription_id = updateAssetMetadata.subscription_id;
+        console.log("updateAssetMetadata", asset_id, metadata, subscription_id);
+        assetServer.updateAssetMetadata(asset_id, metadata, subscription_id);
         var currentWorkload = workload;
         clearWorkload();
         return currentWorkload;
     }
     if (deleteAsset) {
-        var assetId = deleteAsset.assetId, subscription_id = deleteAsset.subscription_id;
-        assetServer.deleteAsset(assetId, subscription_id);
+        var asset_id = deleteAsset.asset_id, subscription_id = deleteAsset.subscription_id;
+        assetServer.deleteAsset(asset_id, subscription_id);
         var currentWorkload = workload;
         clearWorkload();
         return currentWorkload;

@@ -27,6 +27,7 @@ type SerialisedAsset = {
 type SubscribeConfirmation = {
     subscription_id: string;
     subscription_name: string;
+    asset_id: string;
 }
 
 type SubscribeOptions = {
@@ -56,8 +57,8 @@ class Asset {
     addToWorkload: (unit:any) => void;
 
 
-    constructor(sa: SerialisedAsset, addToWorkload: (unit:any) => void) {
-        this.id = sa.id;
+    constructor(sa: Omit<SerialisedAsset,"id">, addToWorkload: (unit:any) => void, instance?: Instance, subscription_name?: string) {
+        this.id = randomUUID();
         this.data = sa.data;
         this.metadata = sa.metadata;
         this.on_update = sa.on_update;
@@ -75,6 +76,12 @@ class Asset {
                     init: this.data,
                 })
             );
+            if (instance && subscription_name) {
+                this.subscribe(instance, {
+                    receive_initial_state: false,
+                    subscription_name: subscription_name,
+                });
+            }
         }
     }
 
@@ -119,9 +126,9 @@ class Asset {
             // answer the request
             const subscriber = this.subscribers[subscription_id];
             const getAssetResponse = {
+                subscription_id,
                 asset_id: this.id,
                 asset_data: this.data,
-                asset_metadata: this.metadata,
             }
             this.addToWorkload(
                 createUnit(subscriber.instance, {
@@ -163,13 +170,35 @@ class Asset {
             : Object.keys(this.subscribers);
         updateReceivers.forEach(subscriber_id => {
         const subscriber = this.subscribers[subscriber_id];
+
         const receiveUpdate = {
-            asset_id: this.id,
+            subscription_id: subscriber_id,
             update,
         }
         this.addToWorkload(
             createUnit(subscriber.instance, {
                 receiveUpdate,
+            })
+        );
+        });
+    }
+
+    receiveUpdateMetadata(metadata: any, subscription_id?: string) {
+        this.metadata = metadata;
+        // distribute the update to all subscribers except the one that sent it
+        const updateReceivers = subscription_id ?
+            Object.keys(this.subscribers).filter(subscriber_id => subscriber_id !== subscription_id)
+            : Object.keys(this.subscribers);
+        updateReceivers.forEach(subscriber_id => {
+        const subscriber = this.subscribers[subscriber_id];
+
+        const receiveUpdateMetadata = {
+            subscription_id: subscriber_id,
+            metadata,
+        }
+        this.addToWorkload(
+            createUnit(subscriber.instance, {
+                receiveUpdateMetadata,
             })
         );
         });
@@ -182,7 +211,7 @@ class Asset {
         otherSubscribers.forEach(subscriber_id => {
             const subscriber = this.subscribers[subscriber_id];
             const deleteNotification = {
-                asset_id: this.id,
+                subscription_id,
             }
             this.addToWorkload(
                 createUnit(subscriber.instance, {
@@ -212,6 +241,7 @@ class Asset {
 
         const subscriptionConfirmation: SubscribeConfirmation = {
             subscription_id,
+            asset_id: this.id,
             subscription_name: options.subscription_name
         };
         // push a confirmation to the subscriber
@@ -227,6 +257,7 @@ class Asset {
         }
     }
     unsubscribe(subscriber_id: string) {
+        const instance = this.subscribers[subscriber_id].instance;
         if (this.subscribers[subscriber_id]) {
             delete this.subscribers[subscriber_id];
         }
@@ -235,7 +266,7 @@ class Asset {
             subscription_id: subscriber_id
         };
         this.addToWorkload(
-            createUnit(this.subscribers[subscriber_id].instance, {
+            createUnit(instance, {
                 unsubscribeConfirmation,
             })
         );
@@ -244,4 +275,5 @@ class Asset {
 
 }
 
-export { Asset, SerialisedAsset };
+export { Asset };
+export type { SerialisedAsset }

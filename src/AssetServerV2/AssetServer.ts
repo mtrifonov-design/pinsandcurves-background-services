@@ -3,13 +3,13 @@ import { Asset, SerialisedAsset } from "./Asset";
 class IndexAsset extends Asset {
     constructor(addToWorkload: (unit:any) => void) {
         super({
-            id: "index",
             data: {},
             metadata: {},
             on_update: {
                 type: "simple",
             }
         }, addToWorkload);
+        this.id = "index";
     }
 }
 
@@ -43,13 +43,14 @@ class AssetServer {
         }
     }
 
-    createAsset(instance: any, asset: SerialisedAsset, subscription_name: string) {
-        const newAsset = new Asset(asset, this.addToWorkload.bind(this));
+    createAsset(instance: any, asset: SerialisedAsset, subscription_name?: string) {
+        const newAsset = new Asset(asset, this.addToWorkload.bind(this),
+        subscription_name ? instance : undefined, subscription_name);
         this.assets.push(newAsset);
-        newAsset.subscribe(instance,{
-            receive_initial_state: false,
-            subscription_name,
-        })
+        // newAsset.subscribe(instance,{
+        //     receive_initial_state: false,
+        //     subscription_name,
+        // })
         this.updateIndexAsset();
     }
     subscribeToExistingAsset(instance: any, assetId: string, subscription_name: string) {
@@ -61,17 +62,34 @@ class AssetServer {
             });
         }
     }
+    unsubscribeFromAsset(assetId: string, subscription_id: string) {
+        const asset = this.assets.find(asset => asset.id === assetId);
+        if (asset) {
+            asset.unsubscribe(subscription_id);
+        }
+    }
+
     updateAsset(assetId: string, update: any, subscription_id: string) {
         const asset = this.assets.find(asset => asset.id === assetId);
         if (asset) {
             asset.receiveUpdate(update, subscription_id);
         }
     }
+
+    updateAssetMetadata(assetId: string, metadata: any, subscription_id: string) {
+        const asset = this.assets.find(asset => asset.id === assetId);
+        if (asset) {
+            asset.receiveUpdateMetadata(metadata, subscription_id);
+            this.updateIndexAsset();
+        }
+    }
+
     deleteAsset(assetId: string, subscription_id: string) {
         const asset = this.assets.find(asset => asset.id === assetId);
         if (asset) {
             asset.receiveDelete(subscription_id);
             this.assets = this.assets.filter(a => a.id !== assetId);
+            this.updateIndexAsset();
         }
     }
     
