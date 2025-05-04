@@ -1,4 +1,4 @@
-import { PinsAndCurvesProjectController } from "@mtrifonov-design/pinsandcurves-external";
+import { PinsAndCurvesProjectController, TimelineController } from "@mtrifonov-design/pinsandcurves-external";
 import getController from "./GetController";
 
 
@@ -13,12 +13,11 @@ function createUnit(receiver: any, payload: any) {
 }
 
 class State {
-    controller: PinsAndCurvesProjectController.PinsAndCurvesProjectController;
+    controller: TimelineController.TimelineController;
     addToWorkload: (unit:any) => void;
-    constructor(project: any, addToWorkload: (unit:any) => void) {
+    constructor(asset: any, addToWorkload: (unit:any) => void) {
         this.addToWorkload = addToWorkload;
-        const dispatch = (e: any) => {};
-        this.controller = getController(dispatch, project);
+        this.controller = TimelineController.TimelineController.fromSerializedWorm(asset);
     }
 
     sendMessage(receiver: any, payload: any) {
@@ -28,12 +27,12 @@ class State {
 
     receiveUpdates(sender:any, updates: any, request_id: string, asset_id: string) {
         updates.forEach((update: any) => {
-            this.controller.receive(update);
+            this.controller.receiveIncomingEvent(update);
         });
-        const project = this.controller.getProject();
+        const asset = this.controller.serialize();
         this.sendMessage(sender, {
             maintainerUpdateResponse: {
-                asset_data: project,
+                asset_data: asset,
                 request_id,
                 asset_id,
             }
