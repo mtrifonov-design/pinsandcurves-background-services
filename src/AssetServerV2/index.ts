@@ -13,7 +13,8 @@ function clearWorkload() {
 }
 
 const assetServer = new AssetServer(addToWorkload)
-
+let savedKey;
+let awaitingSave = false;
 function onCompute(string: string) {
     string = decodeURI(string);
     const unit = JSON.parse(string);
@@ -29,6 +30,14 @@ function onCompute(string: string) {
     } = unit.payload;
 
     if (SAVE_SESSION) {
+        const savedAssets = assetServer.saveAssets();
+        if (savedAssets === undefined) {
+            savedKey = key;
+            awaitingSave = true;
+            const currentWorkload = workload;
+            clearWorkload();
+            return currentWorkload;
+        }
         return {
             persistence: [{
                 type: "worker",
@@ -60,6 +69,7 @@ function onCompute(string: string) {
 
     if (subscribeToExistingAsset) {
         const { asset_id, subscription_name } = subscribeToExistingAsset;
+        //console.log("Received subscribeToExistingAsset", asset_id, subscription_name, assetServer.assets);
         assetServer.subscribeToExistingAsset(unit.sender, asset_id, subscription_name);
         const currentWorkload = workload;
         clearWorkload();
@@ -84,7 +94,7 @@ function onCompute(string: string) {
 
     if (updateAssetMetadata) {
         const { asset_id, metadata, subscription_id } = updateAssetMetadata;
-        console.log("updateAssetMetadata", asset_id, metadata, subscription_id);
+        //console.log("updateAssetMetadata", asset_id, metadata, subscription_id);
         assetServer.updateAssetMetadata(asset_id, metadata, subscription_id);
         const currentWorkload = workload;
         clearWorkload();
@@ -102,6 +112,38 @@ function onCompute(string: string) {
     if (maintainerUpdateResponse) {
         const { asset_id  } = maintainerUpdateResponse;
         assetServer.maintainerUpdateResponse(asset_id, maintainerUpdateResponse);
+        //console.log("maintainerUpdateResponse", asset_id, maintainerUpdateResponse, awaitingSave);
+        if (awaitingSave) {
+            const savedAssets = assetServer.saveAssets();
+            if (savedAssets !== undefined) {
+                addToWorkload({
+                    type: "worker",
+                    receiver: {
+                        instance_id: "persistence",
+                        resource_id: "persistence",
+                        modality: "persistence"
+                    },
+                    payload: {
+                        key: savedKey as string,
+                        SAVE_SESSION: true,
+                        state: assetServer.saveAssets(),
+                    }
+                });
+                awaitingSave = false;
+                savedKey = undefined;
+                // return {
+                //     persistence: [{
+                //         type: "worker",
+                //         receiver: unit.sender,
+                //         payload: {
+                //             key: savedKey as string,
+                //             SAVE_SESSION: true,
+                //             state: assetServer.saveAssets(),
+                //         }
+                //     }]
+                // };
+            }
+        }
         const currentWorkload = workload;
         clearWorkload();
         return currentWorkload;

@@ -56,7 +56,7 @@ function createUnit(receiver, payload) {
 var Asset = /** @class */ (function () {
     function Asset(sa, addToWorkload, instance, subscription_name) {
         this._dirty = false;
-        this.pending_read_requests = {};
+        this.pending_requests = {};
         this.outstanding_updates = [];
         this.subscribers = {};
         this.id = randomUUID();
@@ -97,6 +97,8 @@ var Asset = /** @class */ (function () {
                 }
             }
             else {
+                if (Object.keys(this.pending_requests).length > 0)
+                    return;
                 this._dirty = false;
             }
         },
@@ -105,21 +107,27 @@ var Asset = /** @class */ (function () {
     });
     Asset.prototype.readAsset = function (subscription_id) {
         if (this.dirty) {
-            if (!this.maintainer) {
-                throw new Error("Asset is dirty but has no maintainer");
-            }
-            // send outstanding updates to asset maintainer
-            var request_id = randomUUID();
-            this.addToWorkload(createUnit(this.maintainer, {
-                processUpdates: {
-                    updates: this.outstanding_updates,
-                    request_id: request_id,
-                    asset_id: this.id,
-                }
-            }));
-            this.outstanding_updates = [];
-            // queue this get request
-            this.pending_read_requests[request_id] = subscription_id;
+            // if (!this.maintainer) {
+            //     throw new Error("Asset is dirty but has no maintainer");
+            // }
+            // // send outstanding updates to asset maintainer
+            // const request_id = randomUUID();
+            // this.addToWorkload(
+            //     createUnit(this.maintainer, {
+            //         processUpdates: { 
+            //             updates: this.outstanding_updates,
+            //             request_id, 
+            //             asset_id: this.id,
+            //         }
+            //     })
+            // );
+            // this.outstanding_updates = [];
+            // // queue this get request
+            var request_id = this.pushOutstandingUpdates();
+            this.pending_requests[request_id] = {
+                subscription_id: subscription_id,
+                type: 'read',
+            };
         }
         else {
             // answer the request
@@ -134,6 +142,33 @@ var Asset = /** @class */ (function () {
             }));
         }
     };
+    Asset.prototype.sync = function () {
+        if (this.dirty) {
+            var request_id = this.pushOutstandingUpdates();
+            this.pending_requests[request_id] = {
+                type: 'sync',
+            };
+        }
+    };
+    Asset.prototype.pushOutstandingUpdates = function () {
+        if (this.dirty) {
+            if (!this.maintainer) {
+                throw new Error("Asset is dirty but has no maintainer");
+            }
+            // send outstanding updates to asset maintainer
+            var request_id = randomUUID();
+            this.addToWorkload(createUnit(this.maintainer, {
+                processUpdates: {
+                    updates: this.outstanding_updates,
+                    asset_id: this.id,
+                    request_id: request_id,
+                }
+            }));
+            this.outstanding_updates = [];
+            return request_id;
+        }
+        throw new Error("Asset is not dirty");
+    };
     Asset.prototype.serialize = function () {
         return {
             id: this.id,
@@ -143,14 +178,15 @@ var Asset = /** @class */ (function () {
         };
     };
     Asset.prototype.receiveUpdateFromMaintainer = function (payload) {
-        this.dirty = false;
         var request_id = payload.request_id, asset_data = payload.asset_data;
         // update the asset data
         this.data = asset_data;
         // answer the request
-        var subscriber_id = this.pending_read_requests[request_id];
-        this.readAsset(subscriber_id);
-        delete this.pending_read_requests[request_id];
+        var _a = this.pending_requests[request_id], subscription_id = _a.subscription_id, type = _a.type;
+        if (type === "read")
+            this.readAsset(subscription_id);
+        delete this.pending_requests[request_id];
+        this.dirty = false;
     };
     Asset.prototype.receiveUpdate = function (update, subscription_id) {
         var _this = this;
@@ -278,6 +314,14 @@ var AssetServer = /** @class */ (function () {
         this.updateIndexAsset();
     };
     AssetServer.prototype.saveAssets = function () {
+        var dirtyAssetExists = this.assets.some(function (asset) { return asset.dirty; });
+        if (dirtyAssetExists) {
+            this.assets.forEach(function (asset) {
+                if (asset.dirty)
+                    asset.sync();
+            });
+            return;
+        }
         var assets = this.assets.filter(function (asset) { return asset.id !== "index"; }).map(function (asset) { return asset.serialize(); });
         return assets;
     };
@@ -307,7 +351,9 @@ var AssetServer = /** @class */ (function () {
                 receive_initial_state: true,
                 subscription_name: subscription_name,
             });
+            return;
         }
+        throw new Error("Asset with id ".concat(assetId, " not found"));
     };
     AssetServer.prototype.unsubscribeFromAsset = function (assetId, subscription_id) {
         var asset = this.assets.find(function (asset) { return asset.id === assetId; });
@@ -317,7 +363,7 @@ var AssetServer = /** @class */ (function () {
     };
     AssetServer.prototype.updateAsset = function (assetId, update, subscription_id) {
         var asset = this.assets.find(function (asset) { return asset.id === assetId; });
-        console.log("updateAsset", assetId, update, subscription_id);
+        //console.log("updateAsset", assetId, update, subscription_id);
         if (asset) {
             asset.receiveUpdate(update, subscription_id);
         }
@@ -357,11 +403,21 @@ function clearWorkload() {
     workload = {};
 }
 var assetServer = new AssetServer(addToWorkload);
+var savedKey;
+var awaitingSave = false;
 function onCompute(string) {
     string = decodeURI(string);
     var unit = JSON.parse(string);
     var _a = unit.payload, SAVE_SESSION = _a.SAVE_SESSION, LOAD_SESSION = _a.LOAD_SESSION, key = _a.key, state = _a.state, createAsset = _a.createAsset, subscribeToExistingAsset = _a.subscribeToExistingAsset, unsubscribeFromAsset = _a.unsubscribeFromAsset, updateAsset = _a.updateAsset, deleteAsset = _a.deleteAsset, updateAssetMetadata = _a.updateAssetMetadata, maintainerUpdateResponse = _a.maintainerUpdateResponse;
     if (SAVE_SESSION) {
+        var savedAssets = assetServer.saveAssets();
+        if (savedAssets === undefined) {
+            savedKey = key;
+            awaitingSave = true;
+            var currentWorkload = workload;
+            clearWorkload();
+            return currentWorkload;
+        }
         return {
             persistence: [{
                     type: "worker",
@@ -389,6 +445,7 @@ function onCompute(string) {
     }
     if (subscribeToExistingAsset) {
         var asset_id = subscribeToExistingAsset.asset_id, subscription_name = subscribeToExistingAsset.subscription_name;
+        //console.log("Received subscribeToExistingAsset", asset_id, subscription_name, assetServer.assets);
         assetServer.subscribeToExistingAsset(unit.sender, asset_id, subscription_name);
         var currentWorkload = workload;
         clearWorkload();
@@ -410,7 +467,7 @@ function onCompute(string) {
     }
     if (updateAssetMetadata) {
         var asset_id = updateAssetMetadata.asset_id, metadata = updateAssetMetadata.metadata, subscription_id = updateAssetMetadata.subscription_id;
-        console.log("updateAssetMetadata", asset_id, metadata, subscription_id);
+        //console.log("updateAssetMetadata", asset_id, metadata, subscription_id);
         assetServer.updateAssetMetadata(asset_id, metadata, subscription_id);
         var currentWorkload = workload;
         clearWorkload();
@@ -426,6 +483,38 @@ function onCompute(string) {
     if (maintainerUpdateResponse) {
         var asset_id = maintainerUpdateResponse.asset_id;
         assetServer.maintainerUpdateResponse(asset_id, maintainerUpdateResponse);
+        //console.log("maintainerUpdateResponse", asset_id, maintainerUpdateResponse, awaitingSave);
+        if (awaitingSave) {
+            var savedAssets = assetServer.saveAssets();
+            if (savedAssets !== undefined) {
+                addToWorkload({
+                    type: "worker",
+                    receiver: {
+                        instance_id: "persistence",
+                        resource_id: "persistence",
+                        modality: "persistence"
+                    },
+                    payload: {
+                        key: savedKey,
+                        SAVE_SESSION: true,
+                        state: assetServer.saveAssets(),
+                    }
+                });
+                awaitingSave = false;
+                savedKey = undefined;
+                // return {
+                //     persistence: [{
+                //         type: "worker",
+                //         receiver: unit.sender,
+                //         payload: {
+                //             key: savedKey as string,
+                //             SAVE_SESSION: true,
+                //             state: assetServer.saveAssets(),
+                //         }
+                //     }]
+                // };
+            }
+        }
         var currentWorkload = workload;
         clearWorkload();
         return currentWorkload;

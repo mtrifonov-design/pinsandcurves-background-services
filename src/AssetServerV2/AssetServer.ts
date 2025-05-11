@@ -28,6 +28,13 @@ class AssetServer {
     }
 
     saveAssets() {
+        const dirtyAssetExists = this.assets.some(asset => asset.dirty);
+        if (dirtyAssetExists) {
+            this.assets.forEach(asset => {
+                if (asset.dirty) asset.sync();
+            });
+            return;
+        }
         const assets = this.assets.filter(asset => asset.id !== "index").map(asset => asset.serialize());
         return assets;
     }
@@ -60,7 +67,9 @@ class AssetServer {
                 receive_initial_state: true,
                 subscription_name: subscription_name,
             });
+            return;
         }
+        throw new Error(`Asset with id ${assetId} not found`);
     }
     unsubscribeFromAsset(assetId: string, subscription_id: string) {
         const asset = this.assets.find(asset => asset.id === assetId);
@@ -71,7 +80,7 @@ class AssetServer {
 
     updateAsset(assetId: string, update: any, subscription_id: string) {
         const asset = this.assets.find(asset => asset.id === assetId);
-        console.log("updateAsset", assetId, update, subscription_id);
+        //console.log("updateAsset", assetId, update, subscription_id);
         if (asset) {
             asset.receiveUpdate(update, subscription_id);
         }

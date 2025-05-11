@@ -94,36 +94,44 @@ class Asset {
             if (this.on_update.type === 'simple') {
                 return;
             } else {
+
                 this._dirty = true;
             }
         } else {
+            if (Object.keys(this.pending_requests).length > 0) return;
             this._dirty = false;
         }
     }
 
-    pending_read_requests: {
-        [key: string]: string
+    pending_requests: {
+        [key: string]: {
+            subscription_id?: string;
+            type: 'read' | 'sync';
+        }
     } = {};
     readAsset(subscription_id: string) {
         if (this.dirty) {
-            if (!this.maintainer) {
-                throw new Error("Asset is dirty but has no maintainer");
-            }
-            // send outstanding updates to asset maintainer
-            const request_id = randomUUID();
-            this.addToWorkload(
-                createUnit(this.maintainer, {
-                    processUpdates: { 
-                        updates: this.outstanding_updates,
-                        request_id, 
-                        asset_id: this.id,
-                    }
-                })
-            );
-            this.outstanding_updates = [];
-            // queue this get request
-
-            this.pending_read_requests[request_id] = subscription_id;
+            // if (!this.maintainer) {
+            //     throw new Error("Asset is dirty but has no maintainer");
+            // }
+            // // send outstanding updates to asset maintainer
+            // const request_id = randomUUID();
+            // this.addToWorkload(
+            //     createUnit(this.maintainer, {
+            //         processUpdates: { 
+            //             updates: this.outstanding_updates,
+            //             request_id, 
+            //             asset_id: this.id,
+            //         }
+            //     })
+            // );
+            // this.outstanding_updates = [];
+            // // queue this get request
+            const request_id = this.pushOutstandingUpdates();
+            this.pending_requests[request_id] = {
+                subscription_id,
+                type: 'read',
+            };
         } else {
             // answer the request
             const subscriber = this.subscribers[subscription_id];
@@ -140,6 +148,37 @@ class Asset {
         }
     }
 
+    sync() {
+        if (this.dirty) {
+            const request_id = this.pushOutstandingUpdates();
+            this.pending_requests[request_id] = {
+                type: 'sync',
+            };
+        }
+    }
+
+    pushOutstandingUpdates() : string  {
+        if (this.dirty) {
+            if (!this.maintainer) {
+                throw new Error("Asset is dirty but has no maintainer");
+            }
+            // send outstanding updates to asset maintainer
+            const request_id = randomUUID();
+            this.addToWorkload(
+                createUnit(this.maintainer, {
+                    processUpdates: { 
+                        updates: this.outstanding_updates,
+                        asset_id: this.id,
+                        request_id,
+                    }
+                })
+            );
+            this.outstanding_updates = [];
+            return request_id;
+        }
+        throw new Error("Asset is not dirty");
+    }
+
     serialize(): SerialisedAsset {
         return {
             id: this.id,
@@ -150,14 +189,15 @@ class Asset {
     }
 
     receiveUpdateFromMaintainer(payload: any) {
-        this.dirty = false;
+        
         const { request_id, asset_data } = payload;
         // update the asset data
         this.data = asset_data;
         // answer the request
-        const subscriber_id = this.pending_read_requests[request_id];
-        this.readAsset(subscriber_id);
-        delete this.pending_read_requests[request_id];
+        const {subscription_id,type} = this.pending_requests[request_id];
+        if (type === "read") this.readAsset(subscription_id as string);
+        delete this.pending_requests[request_id];
+        this.dirty = false;
     }
 
     outstanding_updates: any[] = [];
