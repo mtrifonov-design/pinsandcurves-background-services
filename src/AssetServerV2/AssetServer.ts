@@ -7,9 +7,9 @@ class IndexAsset extends Asset {
             metadata: {},
             on_update: {
                 type: "simple",
-            }
+            },
+            id: "index",
         }, addToWorkload);
-        this.id = "index";
     }
 }
 
@@ -60,12 +60,13 @@ class AssetServer {
         // })
         this.updateIndexAsset();
     }
-    subscribeToExistingAsset(instance: any, assetId: string, subscription_name: string) {
+    subscribeToExistingAsset(instance: any, assetId: string, subscription_id: string) {
         const asset = this.assets.find(asset => asset.id === assetId);
+        
         if (asset) {
             asset.subscribe(instance, {
                 receive_initial_state: true,
-                subscription_name: subscription_name,
+                subscription_id: subscription_id,
             });
             return;
         }

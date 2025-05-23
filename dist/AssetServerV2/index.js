@@ -59,7 +59,7 @@ var Asset = /** @class */ (function () {
         this.pending_requests = {};
         this.outstanding_updates = [];
         this.subscribers = {};
-        this.id = randomUUID();
+        this.id = sa.id;
         this.data = sa.data;
         this.metadata = sa.metadata;
         this.on_update = sa.on_update;
@@ -67,7 +67,7 @@ var Asset = /** @class */ (function () {
         // establish connection to the asset maintainer
         if (this.on_update.type === 'custom') {
             this.maintainer = {
-                instance_id: randomUUID(),
+                instance_id: this.on_update.processor.resource_id + "_" + this.id,
                 resource_id: this.on_update.processor.resource_id,
                 modality: this.on_update.processor.modality,
             };
@@ -107,22 +107,6 @@ var Asset = /** @class */ (function () {
     });
     Asset.prototype.readAsset = function (subscription_id) {
         if (this.dirty) {
-            // if (!this.maintainer) {
-            //     throw new Error("Asset is dirty but has no maintainer");
-            // }
-            // // send outstanding updates to asset maintainer
-            // const request_id = randomUUID();
-            // this.addToWorkload(
-            //     createUnit(this.maintainer, {
-            //         processUpdates: { 
-            //             updates: this.outstanding_updates,
-            //             request_id, 
-            //             asset_id: this.id,
-            //         }
-            //     })
-            // );
-            // this.outstanding_updates = [];
-            // // queue this get request
             var request_id = this.pushOutstandingUpdates();
             this.pending_requests[request_id] = {
                 subscription_id: subscription_id,
@@ -198,9 +182,10 @@ var Asset = /** @class */ (function () {
             this.outstanding_updates.push(update);
         }
         // distribute the update to all subscribers except the one that sent it
-        var updateReceivers = subscription_id ?
-            Object.keys(this.subscribers).filter(function (subscriber_id) { return subscriber_id !== subscription_id; })
-            : Object.keys(this.subscribers);
+        // const updateReceivers = subscription_id ?
+        //     Object.keys(this.subscribers).filter(subscriber_id => subscriber_id !== subscription_id)
+        //     : Object.keys(this.subscribers);
+        var updateReceivers = Object.keys(this.subscribers);
         updateReceivers.forEach(function (subscriber_id) {
             var subscriber = _this.subscribers[subscriber_id];
             var receiveUpdate = {
@@ -251,14 +236,13 @@ var Asset = /** @class */ (function () {
         });
     };
     Asset.prototype.subscribe = function (instance, options) {
-        var subscription_id = randomUUID();
-        this.subscribers[subscription_id] = {
+        this.subscribers[options.subscription_id] = {
             instance: instance,
         };
+        console.log("subscribe", options);
         var subscriptionConfirmation = {
-            subscription_id: subscription_id,
             asset_id: this.id,
-            subscription_name: options.subscription_name
+            subscription_id: options.subscription_id
         };
         // push a confirmation to the subscriber
         this.addToWorkload(createUnit(instance, {
@@ -266,7 +250,7 @@ var Asset = /** @class */ (function () {
         }));
         // if the subscriber has requested the initial state, send it
         if (options.receive_initial_state) {
-            this.readAsset(subscription_id);
+            this.readAsset(options.subscription_id);
         }
     };
     Asset.prototype.unsubscribe = function (subscriber_id) {
@@ -288,15 +272,14 @@ var Asset = /** @class */ (function () {
 var IndexAsset = /** @class */ (function (_super) {
     __extends(IndexAsset, _super);
     function IndexAsset(addToWorkload) {
-        var _this = _super.call(this, {
+        return _super.call(this, {
             data: {},
             metadata: {},
             on_update: {
                 type: "simple",
-            }
+            },
+            id: "index",
         }, addToWorkload) || this;
-        _this.id = "index";
-        return _this;
     }
     return IndexAsset;
 }(Asset));
@@ -344,12 +327,12 @@ var AssetServer = /** @class */ (function () {
         // })
         this.updateIndexAsset();
     };
-    AssetServer.prototype.subscribeToExistingAsset = function (instance, assetId, subscription_name) {
+    AssetServer.prototype.subscribeToExistingAsset = function (instance, assetId, subscription_id) {
         var asset = this.assets.find(function (asset) { return asset.id === assetId; });
         if (asset) {
             asset.subscribe(instance, {
                 receive_initial_state: true,
-                subscription_name: subscription_name,
+                subscription_id: subscription_id,
             });
             return;
         }
@@ -444,9 +427,8 @@ function onCompute(string) {
         return currentWorkload;
     }
     if (subscribeToExistingAsset) {
-        var asset_id = subscribeToExistingAsset.asset_id, subscription_name = subscribeToExistingAsset.subscription_name;
-        //console.log("Received subscribeToExistingAsset", asset_id, subscription_name, assetServer.assets);
-        assetServer.subscribeToExistingAsset(unit.sender, asset_id, subscription_name);
+        var asset_id = subscribeToExistingAsset.asset_id, subscription_id = subscribeToExistingAsset.subscription_id;
+        assetServer.subscribeToExistingAsset(unit.sender, asset_id, subscription_id);
         var currentWorkload = workload;
         clearWorkload();
         return currentWorkload;
@@ -467,7 +449,6 @@ function onCompute(string) {
     }
     if (updateAssetMetadata) {
         var asset_id = updateAssetMetadata.asset_id, metadata = updateAssetMetadata.metadata, subscription_id = updateAssetMetadata.subscription_id;
-        //console.log("updateAssetMetadata", asset_id, metadata, subscription_id);
         assetServer.updateAssetMetadata(asset_id, metadata, subscription_id);
         var currentWorkload = workload;
         clearWorkload();
@@ -483,7 +464,6 @@ function onCompute(string) {
     if (maintainerUpdateResponse) {
         var asset_id = maintainerUpdateResponse.asset_id;
         assetServer.maintainerUpdateResponse(asset_id, maintainerUpdateResponse);
-        //console.log("maintainerUpdateResponse", asset_id, maintainerUpdateResponse, awaitingSave);
         if (awaitingSave) {
             var savedAssets = assetServer.saveAssets();
             if (savedAssets !== undefined) {
@@ -502,17 +482,6 @@ function onCompute(string) {
                 });
                 awaitingSave = false;
                 savedKey = undefined;
-                // return {
-                //     persistence: [{
-                //         type: "worker",
-                //         receiver: unit.sender,
-                //         payload: {
-                //             key: savedKey as string,
-                //             SAVE_SESSION: true,
-                //             state: assetServer.saveAssets(),
-                //         }
-                //     }]
-                // };
             }
         }
         var currentWorkload = workload;

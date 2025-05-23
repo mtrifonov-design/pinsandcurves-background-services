@@ -26,12 +26,11 @@ type SerialisedAsset = {
 
 type SubscribeConfirmation = {
     subscription_id: string;
-    subscription_name: string;
     asset_id: string;
 }
 
 type SubscribeOptions = {
-    subscription_name: string;
+    subscription_id: string;
     receive_initial_state?: boolean;
 }
 
@@ -57,8 +56,8 @@ class Asset {
     addToWorkload: (unit:any) => void;
 
 
-    constructor(sa: Omit<SerialisedAsset,"id">, addToWorkload: (unit:any) => void, instance?: Instance, subscription_name?: string) {
-        this.id = randomUUID();
+    constructor(sa: SerialisedAsset, addToWorkload: (unit:any) => void, instance?: Instance, subscription_name?: string) {
+        this.id = sa.id;
         this.data = sa.data;
         this.metadata = sa.metadata;
         this.on_update = sa.on_update;
@@ -67,7 +66,7 @@ class Asset {
         // establish connection to the asset maintainer
         if (this.on_update.type === 'custom') {
             this.maintainer = {
-                instance_id: randomUUID(),
+                instance_id: this.on_update.processor.resource_id+"_" + this.id,
                 resource_id: this.on_update.processor.resource_id,
                 modality: this.on_update.processor.modality,
             }
@@ -111,22 +110,6 @@ class Asset {
     } = {};
     readAsset(subscription_id: string) {
         if (this.dirty) {
-            // if (!this.maintainer) {
-            //     throw new Error("Asset is dirty but has no maintainer");
-            // }
-            // // send outstanding updates to asset maintainer
-            // const request_id = randomUUID();
-            // this.addToWorkload(
-            //     createUnit(this.maintainer, {
-            //         processUpdates: { 
-            //             updates: this.outstanding_updates,
-            //             request_id, 
-            //             asset_id: this.id,
-            //         }
-            //     })
-            // );
-            // this.outstanding_updates = [];
-            // // queue this get request
             const request_id = this.pushOutstandingUpdates();
             this.pending_requests[request_id] = {
                 subscription_id,
@@ -209,9 +192,11 @@ class Asset {
             this.outstanding_updates.push(update);
         }
         // distribute the update to all subscribers except the one that sent it
-        const updateReceivers = subscription_id ?
-            Object.keys(this.subscribers).filter(subscriber_id => subscriber_id !== subscription_id)
-            : Object.keys(this.subscribers);
+        // const updateReceivers = subscription_id ?
+        //     Object.keys(this.subscribers).filter(subscriber_id => subscriber_id !== subscription_id)
+        //     : Object.keys(this.subscribers);
+
+        const updateReceivers = Object.keys(this.subscribers);
         updateReceivers.forEach(subscriber_id => {
         const subscriber = this.subscribers[subscriber_id];
 
@@ -278,15 +263,13 @@ class Asset {
     } } = {};
 
     subscribe(instance: Instance, options: SubscribeOptions) {
-        const subscription_id = randomUUID();
-        this.subscribers[subscription_id] = {
+        this.subscribers[options.subscription_id] = {
             instance: instance,
         };
-
+        console.log("subscribe", options)
         const subscriptionConfirmation: SubscribeConfirmation = {
-            subscription_id,
             asset_id: this.id,
-            subscription_name: options.subscription_name
+            subscription_id: options.subscription_id
         };
         // push a confirmation to the subscriber
         this.addToWorkload(
@@ -297,7 +280,7 @@ class Asset {
 
         // if the subscriber has requested the initial state, send it
         if (options.receive_initial_state) {
-            this.readAsset(subscription_id);
+            this.readAsset(options.subscription_id);
         }
     }
     unsubscribe(subscriber_id: string) {

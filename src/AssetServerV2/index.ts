@@ -68,9 +68,8 @@ function onCompute(string: string) {
     }
 
     if (subscribeToExistingAsset) {
-        const { asset_id, subscription_name } = subscribeToExistingAsset;
-        //console.log("Received subscribeToExistingAsset", asset_id, subscription_name, assetServer.assets);
-        assetServer.subscribeToExistingAsset(unit.sender, asset_id, subscription_name);
+        const { asset_id, subscription_id } = subscribeToExistingAsset;
+        assetServer.subscribeToExistingAsset(unit.sender, asset_id, subscription_id);
         const currentWorkload = workload;
         clearWorkload();
         return currentWorkload;
@@ -94,7 +93,6 @@ function onCompute(string: string) {
 
     if (updateAssetMetadata) {
         const { asset_id, metadata, subscription_id } = updateAssetMetadata;
-        //console.log("updateAssetMetadata", asset_id, metadata, subscription_id);
         assetServer.updateAssetMetadata(asset_id, metadata, subscription_id);
         const currentWorkload = workload;
         clearWorkload();
@@ -112,7 +110,6 @@ function onCompute(string: string) {
     if (maintainerUpdateResponse) {
         const { asset_id  } = maintainerUpdateResponse;
         assetServer.maintainerUpdateResponse(asset_id, maintainerUpdateResponse);
-        //console.log("maintainerUpdateResponse", asset_id, maintainerUpdateResponse, awaitingSave);
         if (awaitingSave) {
             const savedAssets = assetServer.saveAssets();
             if (savedAssets !== undefined) {
@@ -131,26 +128,12 @@ function onCompute(string: string) {
                 });
                 awaitingSave = false;
                 savedKey = undefined;
-                // return {
-                //     persistence: [{
-                //         type: "worker",
-                //         receiver: unit.sender,
-                //         payload: {
-                //             key: savedKey as string,
-                //             SAVE_SESSION: true,
-                //             state: assetServer.saveAssets(),
-                //         }
-                //     }]
-                // };
             }
         }
         const currentWorkload = workload;
         clearWorkload();
         return currentWorkload;
     }
-
-
-
 }
 
 
