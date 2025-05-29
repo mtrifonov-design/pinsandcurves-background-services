@@ -36,7 +36,7 @@
     "typescript": "^5.6.3"
   },
   "dependencies": {
-    "@mtrifonov-design/pinsandcurves-external": "^0.0.232"
+    "@mtrifonov-design/pinsandcurves-external": "^0.0.242"
   },
   "sideEffects": [
     "*.ts"
