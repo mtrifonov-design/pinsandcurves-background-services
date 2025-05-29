@@ -16,7 +16,8 @@
     }
   },
   "scripts": {
-    "build": "rollup -c --bundleConfigAsCjs"
+    "build": "rollup -c --bundleConfigAsCjs",
+    "dev": "cd dist && python cors_http_server.py"
   },
   "author": "",
   "license": "ISC",
