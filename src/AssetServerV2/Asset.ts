@@ -108,8 +108,8 @@ class Asset {
             type: 'read' | 'sync';
         }
     } = {};
-    readAsset(subscription_id: string) {
-        if (this.dirty) {
+    readAsset(subscription_id: string, force = false) {
+        if (this.dirty && !force) {
             const request_id = this.pushOutstandingUpdates();
             this.pending_requests[request_id] = {
                 subscription_id,
@@ -178,9 +178,11 @@ class Asset {
         this.data = asset_data;
         // answer the request
         const {subscription_id,type} = this.pending_requests[request_id];
-        if (type === "read") this.readAsset(subscription_id as string);
+        if (type === "read") this.readAsset(subscription_id as string,true);
         delete this.pending_requests[request_id];
-        this.dirty = false;
+        if (Object.keys(this.pending_requests).length === 0) {
+            this.dirty = false;
+        }
     }
 
     outstanding_updates: any[] = [];
@@ -267,14 +269,14 @@ class Asset {
             instance: instance,
         };
         console.log("subscribe", options)
-        const subscriptionConfirmation: SubscribeConfirmation = {
+        const subscribeToExistingAsset_response: SubscribeConfirmation = {
             asset_id: this.id,
             subscription_id: options.subscription_id
         };
         // push a confirmation to the subscriber
         this.addToWorkload(
             createUnit(instance, {
-                subscriptionConfirmation,
+                subscribeToExistingAsset_response,
             })
         );
 
@@ -289,12 +291,12 @@ class Asset {
             delete this.subscribers[subscriber_id];
         }
         // push a confirmation to the subscriber
-        const unsubscribeConfirmation = {
+        const unsubscribeFromAsset_response = {
             subscription_id: subscriber_id
         };
         this.addToWorkload(
             createUnit(instance, {
-                unsubscribeConfirmation,
+                unsubscribeFromAsset_response,
             })
         );
     }

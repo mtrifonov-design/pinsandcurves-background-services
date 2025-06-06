@@ -105,8 +105,9 @@ var Asset = /** @class */ (function () {
         enumerable: false,
         configurable: true
     });
-    Asset.prototype.readAsset = function (subscription_id) {
-        if (this.dirty) {
+    Asset.prototype.readAsset = function (subscription_id, force) {
+        if (force === void 0) { force = false; }
+        if (this.dirty && !force) {
             var request_id = this.pushOutstandingUpdates();
             this.pending_requests[request_id] = {
                 subscription_id: subscription_id,
@@ -168,9 +169,11 @@ var Asset = /** @class */ (function () {
         // answer the request
         var _a = this.pending_requests[request_id], subscription_id = _a.subscription_id, type = _a.type;
         if (type === "read")
-            this.readAsset(subscription_id);
+            this.readAsset(subscription_id, true);
         delete this.pending_requests[request_id];
-        this.dirty = false;
+        if (Object.keys(this.pending_requests).length === 0) {
+            this.dirty = false;
+        }
     };
     Asset.prototype.receiveUpdate = function (update, subscription_id) {
         var _this = this;
@@ -240,13 +243,13 @@ var Asset = /** @class */ (function () {
             instance: instance,
         };
         console.log("subscribe", options);
-        var subscriptionConfirmation = {
+        var subscribeToExistingAsset_response = {
             asset_id: this.id,
             subscription_id: options.subscription_id
         };
         // push a confirmation to the subscriber
         this.addToWorkload(createUnit(instance, {
-            subscriptionConfirmation: subscriptionConfirmation,
+            subscribeToExistingAsset_response: subscribeToExistingAsset_response,
         }));
         // if the subscriber has requested the initial state, send it
         if (options.receive_initial_state) {
@@ -259,11 +262,11 @@ var Asset = /** @class */ (function () {
             delete this.subscribers[subscriber_id];
         }
         // push a confirmation to the subscriber
-        var unsubscribeConfirmation = {
+        var unsubscribeFromAsset_response = {
             subscription_id: subscriber_id
         };
         this.addToWorkload(createUnit(instance, {
-            unsubscribeConfirmation: unsubscribeConfirmation,
+            unsubscribeFromAsset_response: unsubscribeFromAsset_response,
         }));
     };
     return Asset;
